@@ -9,10 +9,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.PointF;
-import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Environment;
-import android.provider.MediaStore;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AlertDialog;
@@ -27,26 +24,16 @@ import com.google.android.gms.vision.MultiProcessor;
 import com.google.android.gms.vision.Tracker;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.face.FaceDetector;
-import com.microsoft.projectoxford.face.FaceServiceClient;
-import com.microsoft.projectoxford.face.FaceServiceRestClient;
 import com.microsoft.projectoxford.face.contract.SimilarPersistedFace;
 import com.okey.demagicandroid.common.CameraSourcePreview;
 import com.okey.demagicandroid.common.GraphicOverlay;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity
@@ -299,7 +286,8 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public void onFoundSimilarFaces(SimilarPersistedFace[] foundFaces) {
-
+        if( foundFaces.length > 0 )
+        new OxfordFaceGetter(mLargeFaceListId).execute(foundFaces);
     }
 
     private void takeShot() {
@@ -321,38 +309,11 @@ public class MainActivity extends AppCompatActivity
             InputStream inputStream = new ByteArrayInputStream(output.toByteArray());
             new OxfordFaceDetector(callback).execute(inputStream);
 
-                //new AzureBlobUploader(bytes, callback).execute();
-
-//                String url ="http://www.google.com";
-//                new CloudSender(url, new Response.ErrorListener() {
-//                    @Override
-//                    public void onErrorResponse(VolleyError error) {
-//
-//                    }
-//                    }, new Response.Listener<String>() {
-//                    @Override
-//                    public void onResponse(String response) {
-//                    }
-//
-//                    },
-//                    bytes);
-//
-//                RequestQueue queue = Volley.newRequestQueue(context);
-//
-//                StringRequest stringRequest = new StringRequest(Request.Method.PUT, url,
-//                            new Response.Listener<String>() {
-//                                @Override
-//                                public void onResponse(String response) {
-//                                }
-//
-//                            },
-//                            new Response.ErrorListener() {
-//                                @Override
-//                                public void onErrorResponse(VolleyError error) {
-//
-//                                }
-//                            });
-//                queue.add(stringRequest);
+            // Uncomment this AsyncTask c'tor to apply Logic App flow on Azure:
+            // This flow means triggering event upon a image uploading to Azure Store
+            // Such a event calls Logic App that perform Face Detection with the same Oxford Api
+            // but invoked from cloud.
+            //new AzureBlobUploader(bytes, callback).execute();
 
             }
         });
@@ -388,17 +349,22 @@ public class MainActivity extends AppCompatActivity
             float width = item.getWidth();
             //Log.d(TAG, position.x
             mFaceGraphic.setId(faceId);
-            detectedFacesIds.add(item.getId());
+
         }
 
         @Override
         public void onUpdate(FaceDetector.Detections<Face> detectionResults, Face face) {
-            int faceId = face.getId();
-            if( !detectedFacesIds.contains(faceId) ) {
+
+            mOverlay.add(mFaceGraphic);
+            mFaceGraphic.updateFace(face);
+
+            Integer faceId = face.getId();
+            int index = detectedFacesIds.indexOf(faceId);
+            if( index == -1 ) {
+                detectedFacesIds.add(faceId);
                 takeShot();
-                mOverlay.add(mFaceGraphic);
-                mFaceGraphic.updateFace(face);
             }
+
         }
 
         /**

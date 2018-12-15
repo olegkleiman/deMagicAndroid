@@ -4,7 +4,6 @@ import android.os.AsyncTask;
 import android.util.Log;
 
 import com.microsoft.projectoxford.face.FaceServiceClient;
-import com.microsoft.projectoxford.face.FaceServiceRestClient;
 import com.microsoft.projectoxford.face.contract.Face;
 
 import java.io.InputStream;
@@ -53,11 +52,10 @@ public class OxfordFaceDetector extends AsyncTask<InputStream, String, Face[]> {
 
     @Override
     protected void onPostExecute(Face[] result) {
-        if( result != null ) {
-            Log.d(TAG, result.length + " face"
-                    + (result.length != 1 ? "s" : "") + " detected");
+        if( result != null && result.length > 0 ) {
 
             mCallback.onFaceDetected(result[0].faceId);
+
         }
     }
 }

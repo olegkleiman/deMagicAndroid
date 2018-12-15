@@ -4,4 +4,6 @@
     <string name="permission_camera_rationale">Access to the camera is needed for detection</string>
     <string name="no_camera_permission">This application cannot run because it does not have the camera permission.  The application will now exit.</string>
     <string name="low_storage_error">Face detector dependencies cannot be downloaded due to low device storage</string>
+    <string name="endpoint">https://northeurope.api.cognitive.microsoft.com/face/v1.0</string>
+    <string name="subscription_key">91c9316d38044714b15eb630c1b6738a</string>
 </resources>

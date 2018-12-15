@@ -8,26 +8,18 @@ import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.PointF;
-import android.graphics.RectF;
-import android.graphics.drawable.BitmapDrawable;
-import android.support.v4.app.ActivityCompat;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.support.design.widget.Snackbar;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.vision.CameraSource;
@@ -35,13 +27,30 @@ import com.google.android.gms.vision.MultiProcessor;
 import com.google.android.gms.vision.Tracker;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.face.FaceDetector;
+import com.microsoft.projectoxford.face.FaceServiceClient;
+import com.microsoft.projectoxford.face.FaceServiceRestClient;
+import com.microsoft.projectoxford.face.contract.SimilarPersistedFace;
 import com.okey.demagicandroid.common.CameraSourcePreview;
 import com.okey.demagicandroid.common.GraphicOverlay;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity
+    implements IOxfordFaceDetector,IOxfordSimilarityFinder {
 
     private static final String TAG = "deMagic:MainActivity";
     private CameraSource mCameraSource = null;
@@ -51,6 +60,9 @@ public class MainActivity extends AppCompatActivity {
     private static final int RC_HANDLE_GMS = 9001;
     // permission request codes need to be < 256
     private static final int RC_HANDLE_CAMERA_PERM = 2;
+
+    private final String mLargeFaceListId = "10";
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,13 +74,22 @@ public class MainActivity extends AppCompatActivity {
 
         // Check for the camera permission before accessing the camera.  If the
         // permission is not granted yet, request permission.
-        int rc = ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
-        if (rc == PackageManager.PERMISSION_GRANTED) {
-            createCameraSource();
-        } else {
-            requestCameraPermission();
+        String[] PERMISSIONS = {
+            android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            android.Manifest.permission.CAMERA
+        };
+        int PERMISSION_ALL = 1;
+        if(!hasPermissions(this, PERMISSIONS)){
+            ActivityCompat.requestPermissions(this, PERMISSIONS, PERMISSION_ALL);
         }
+        createCameraSource();
 
+//        int rc = ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
+//        if (rc == PackageManager.PERMISSION_GRANTED) {
+//            createCameraSource();
+//        } else {
+//            requestCameraPermission();
+//        }
 
 //        Button btn = (Button) findViewById(R.id.button);
 //        btn.setOnClickListener(new View.OnClickListener() {
@@ -119,6 +140,17 @@ public class MainActivity extends AppCompatActivity {
 
 
 
+    }
+
+    public static boolean hasPermissions(Context context, String... permissions) {
+        if (context != null && permissions != null) {
+            for (String permission : permissions) {
+                if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private void requestCameraPermission() {
@@ -259,16 +291,37 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    public void onFaceDetected(UUID faceId) {
+        Log.d(TAG, "Detected faceId: " + faceId.toString());
+        new OxfordSimilarityFinder(mLargeFaceListId, this).execute(faceId);
+    }
+
+    @Override
+    public void onFoundSimilarFaces(SimilarPersistedFace[] foundFaces) {
+
+    }
+
     private void takeShot() {
 
         final Context context = getApplicationContext();
+        final IOxfordFaceDetector callback = this;
 
         mCameraSource.takePicture(null, new CameraSource.PictureCallback() {
             @Override
             public void onPictureTaken(byte[] bytes) {
 
+            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, output);
 
-                new AzureBlobUploader(bytes).execute();
+            // For test purposes
+            new FileSaver(context).execute(bitmap);
+
+            InputStream inputStream = new ByteArrayInputStream(output.toByteArray());
+            new OxfordFaceDetector(callback).execute(inputStream);
+
+                //new AzureBlobUploader(bytes, callback).execute();
 
 //                String url ="http://www.google.com";
 //                new CloudSender(url, new Response.ErrorListener() {
@@ -319,6 +372,7 @@ public class MainActivity extends AppCompatActivity {
     private class GraphicFaceTracker extends Tracker<Face> {
         private GraphicOverlay mOverlay;
         private FaceGraphic mFaceGraphic;
+        List<Integer> detectedFacesIds = new ArrayList<>();
 
         GraphicFaceTracker(GraphicOverlay overlay) {
             mOverlay = overlay;
@@ -334,16 +388,17 @@ public class MainActivity extends AppCompatActivity {
             float width = item.getWidth();
             //Log.d(TAG, position.x
             mFaceGraphic.setId(faceId);
+            detectedFacesIds.add(item.getId());
         }
 
-        /**
-         * Update the position/characteristics of the face within the overlay.
-         */
         @Override
         public void onUpdate(FaceDetector.Detections<Face> detectionResults, Face face) {
-            takeShot();
-            mOverlay.add(mFaceGraphic);
-            mFaceGraphic.updateFace(face);
+            int faceId = face.getId();
+            if( !detectedFacesIds.contains(faceId) ) {
+                takeShot();
+                mOverlay.add(mFaceGraphic);
+                mFaceGraphic.updateFace(face);
+            }
         }
 
         /**

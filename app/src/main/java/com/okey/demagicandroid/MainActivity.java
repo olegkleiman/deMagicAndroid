@@ -32,6 +32,8 @@ import com.microsoft.projectoxford.face.contract.SimilarPersistedFace;
 import com.okey.demagicandroid.common.CameraSourcePreview;
 import com.okey.demagicandroid.common.GraphicOverlay;
 
+import org.json.JSONObject;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -41,7 +43,7 @@ import java.util.List;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity
-        implements IOxfordFaceDetector,IOxfordSimilarityFinder {
+        implements IOxfordFaceDetector, IOxfordSimilarityFinder, INotificator {
 
     private static final String TAG = "deMagic:MainActivity";
     private CameraSource mCameraSource = null;
@@ -243,7 +245,13 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onFoundSimilarFaces(SimilarPersistedFace[] foundFaces) {
         if( foundFaces.length > 0 )
-            new OxfordFaceGetter(mLargeFaceListId).execute(foundFaces);
+            new OxfordFaceGetter(mLargeFaceListId, this).execute(foundFaces);
+    }
+
+    @Override
+    public void onSimilarFaceFound(JSONObject userData) {
+        Log.d(TAG, "Notifier");
+        new Notificator().execute(userData);
     }
 
     public Bitmap mergeBitmaps(Bitmap face, Bitmap overlay) {

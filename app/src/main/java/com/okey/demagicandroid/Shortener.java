@@ -48,7 +48,7 @@ public class Shortener extends AsyncTask<UUID, Void, URI> {
 
             JSONObject payload = new JSONObject();
             payload.put("longDynamicLink",
-                    customDomainURL.concat("?link=").concat(longLinkURL).concat("faceId=").concat(faceId));
+                    customDomainURL.concat("?link=").concat(longLinkURL).concat("?faceId=").concat(faceId));
             JSONObject optionJSON = new JSONObject();
             optionJSON.put("option", "SHORT");
             payload.put("suffix", optionJSON);

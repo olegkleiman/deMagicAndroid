@@ -58,7 +58,7 @@ public class MainActivity extends AppCompatActivity
     // permission request codes need to be < 256
     private static final int RC_HANDLE_CAMERA_PERM = 2;
 
-    private final String mLargeFaceListId = "10";
+    private final String mLargeFaceListId = "11";
 
 
     @Override
@@ -251,8 +251,13 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public void onFoundSimilarFaces(SimilarPersistedFace[] foundFaces) {
-        if( foundFaces.length > 0 )
-            new OxfordFaceGetter(mLargeFaceListId, (IOxfordGetter)this).execute(foundFaces);
+        if( foundFaces.length > 0 ) {
+            for(SimilarPersistedFace persistedFace: foundFaces) {
+                if( persistedFace.confidence > 0.6 ) {
+                    new OxfordFaceGetter(mLargeFaceListId, (IOxfordGetter) this).execute(persistedFace);
+                }
+            }
+        }
     }
 
     @Override

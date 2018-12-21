@@ -12,7 +12,7 @@ import org.json.JSONObject;
 
 import java.util.UUID;
 
-public class OxfordFaceGetter extends AsyncTask<SimilarPersistedFace[], Void, JSONObject> {
+public class OxfordFaceGetter extends AsyncTask<SimilarPersistedFace, Void, JSONObject> {
 
     private final String TAG = "deMagic:Getter";
     private final String mLargeFaceListId;
@@ -25,9 +25,9 @@ public class OxfordFaceGetter extends AsyncTask<SimilarPersistedFace[], Void, JS
     }
 
     @Override
-    protected JSONObject doInBackground(SimilarPersistedFace[]... similarFaces) {
+    protected JSONObject doInBackground(SimilarPersistedFace... similarFaces) {
 
-        SimilarPersistedFace similarFace = similarFaces[0][0];
+        SimilarPersistedFace similarFace = similarFaces[0];
         if( similarFace == null ) {
             return null;
         }
@@ -40,11 +40,7 @@ public class OxfordFaceGetter extends AsyncTask<SimilarPersistedFace[], Void, JS
             for(FaceMetadata metadata: facesMetadata) {
                 if( metadata.persistedFaceId.equals(similarFace.persistedFaceId) ) {
                     String userData = metadata.userData;
-                    JSONObject jsonUserData = new JSONObject(userData);
-                    String name = jsonUserData.getString("name");
-                    Log.d(TAG, name);
-
-                    return jsonUserData;
+                    return new JSONObject(userData);
                 }
             }
         } catch (Exception ex ) {

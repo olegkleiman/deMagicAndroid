@@ -14,16 +14,23 @@ import java.io.BufferedOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import javax.net.ssl.HttpsURLConnection;
 
 
-public class Notificator extends AsyncTask<JSONObject, Void, Void> {
+public class KarixNotificator extends AsyncTask<JSONObject, Void, Void> {
 
     final String TAG = "deMagic:Notificator";
+    final URI mLink;
+
+    KarixNotificator(URI link) {
+        mLink = link;
+    }
 
     @Override
     protected Void doInBackground(JSONObject... params) {
@@ -45,8 +52,8 @@ public class Notificator extends AsyncTask<JSONObject, Void, Void> {
 
             //client.setDoOutput(true);
             int responseCode = client.getResponseCode();
-            Log.d(TAG, String.format("%d", responseCode));
-
+            String response = client.getResponseMessage();
+            Log.d(TAG, String.format("%d %s", responseCode, response));
 
         } catch( Exception e ) {
             Log.e(TAG, e.getMessage());

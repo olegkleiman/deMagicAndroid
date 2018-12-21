@@ -10,13 +10,16 @@ import com.microsoft.projectoxford.face.contract.SimilarPersistedFace;
 
 import org.json.JSONObject;
 
+import java.util.UUID;
+
 public class OxfordFaceGetter extends AsyncTask<SimilarPersistedFace[], Void, JSONObject> {
 
     private final String TAG = "deMagic:Getter";
     private final String mLargeFaceListId;
-    private INotificator mCallback;
+    private IOxfordGetter mCallback;
+    private UUID mPersistedFaceId;
 
-    OxfordFaceGetter(String largeFaceListId, INotificator callback) {
+    OxfordFaceGetter(String largeFaceListId, IOxfordGetter callback) {
         mLargeFaceListId = largeFaceListId;
         mCallback = callback;
     }
@@ -25,6 +28,11 @@ public class OxfordFaceGetter extends AsyncTask<SimilarPersistedFace[], Void, JS
     protected JSONObject doInBackground(SimilarPersistedFace[]... similarFaces) {
 
         SimilarPersistedFace similarFace = similarFaces[0][0];
+        if( similarFace == null ) {
+            return null;
+        }
+
+        mPersistedFaceId = similarFace.persistedFaceId;
 
         FaceServiceClient faceServiceClient = DeMagicApp.getFaceServiceClient();
         try {
@@ -48,6 +56,6 @@ public class OxfordFaceGetter extends AsyncTask<SimilarPersistedFace[], Void, JS
     @Override
     protected void onPostExecute(JSONObject userData) {
         if( mCallback != null )
-            mCallback.onSimilarFaceFound(userData);
+            mCallback.onGotPersistedFace(mPersistedFaceId, userData);
     }
 }

@@ -21,6 +21,7 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
 
+import com.crashlytics.android.Crashlytics;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.vision.CameraSource;
@@ -38,12 +39,15 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import io.fabric.sdk.android.Fabric;
+
 public class MainActivity extends AppCompatActivity
-        implements IOxfordFaceDetector, IOxfordSimilarityFinder, INotificator {
+        implements IOxfordFaceDetector, IOxfordSimilarityFinder, IOxfordGetter, IShortener {
 
     private static final String TAG = "deMagic:MainActivity";
     private CameraSource mCameraSource = null;
@@ -60,6 +64,9 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        Fabric.with(this, new Crashlytics());
+
         setContentView(R.layout.activity_main);
 
         mPreview = (CameraSourcePreview) findViewById(R.id.preview);
@@ -239,19 +246,25 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onFaceDetected(UUID faceId) {
         Log.d(TAG, "Detected faceId: " + faceId.toString());
-        new OxfordSimilarityFinder(mLargeFaceListId, this).execute(faceId);
+        new OxfordSimilarityFinder(mLargeFaceListId, (IOxfordSimilarityFinder)this).execute(faceId);
     }
 
     @Override
     public void onFoundSimilarFaces(SimilarPersistedFace[] foundFaces) {
         if( foundFaces.length > 0 )
-            new OxfordFaceGetter(mLargeFaceListId, this).execute(foundFaces);
+            new OxfordFaceGetter(mLargeFaceListId, (IOxfordGetter)this).execute(foundFaces);
     }
 
     @Override
-    public void onSimilarFaceFound(JSONObject userData) {
-        Log.d(TAG, "Notifier");
-        new Notificator().execute(userData);
+    public void onGotPersistedFace(UUID persistedFaceId, JSONObject userData) {
+        Log.d(TAG, "Got persisted faceId");
+        new Shortener(userData, (IShortener)this).execute(persistedFaceId);
+    }
+
+    @Override
+    public void onShortened(URI shortLink, JSONObject userData) {
+        Log.d(TAG, "Shortened");
+        new KarixNotificator(shortLink).execute(userData);
     }
 
     public Bitmap mergeBitmaps(Bitmap face, Bitmap overlay) {

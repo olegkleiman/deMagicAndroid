@@ -35,7 +35,8 @@ dependencies {
     implementation 'com.android.volley:volley:1.1.1'
     implementation 'com.microsoft.azure.android:azure-storage-android:2.0.0@aar'
     implementation 'com.microsoft.projectoxford:face:1.4.3'
-    implementation 'com.crashlytics.sdk.android:crashlytics:2.9.7'
+    implementation 'com.crashlytics.sdk.android:crashlytics:2.9.8'
+    implementation 'com.google.guava:guava:19.0'
     testImplementation 'junit:junit:4.12'
 
     implementation group: 'org.apache.httpcomponents', name: 'httpmime', version: '4.5.2'

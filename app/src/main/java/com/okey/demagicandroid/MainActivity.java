@@ -11,7 +11,14 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.PointF;
 import android.graphics.Rect;
+import android.hardware.Camera;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.media.AudioManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
@@ -20,6 +27,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
+import android.widget.Toast;
 
 import com.crashlytics.android.Crashlytics;
 import com.google.android.gms.common.ConnectionResult;
@@ -29,6 +37,12 @@ import com.google.android.gms.vision.MultiProcessor;
 import com.google.android.gms.vision.Tracker;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.face.FaceDetector;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
+import com.microsoft.projectoxford.face.FaceServiceClient;
 import com.microsoft.projectoxford.face.contract.SimilarPersistedFace;
 import com.okey.demagicandroid.common.CameraSourcePreview;
 import com.okey.demagicandroid.common.GraphicOverlay;
@@ -42,12 +56,18 @@ import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.fabric.sdk.android.Fabric;
 
 public class MainActivity extends AppCompatActivity
-        implements IOxfordFaceDetector, IOxfordSimilarityFinder, IOxfordGetter, IShortener {
+        implements IOxfordFaceDetector, IOxfordSimilarityFinder, IOxfordGetter, IShortener, IKarixNotificator {
 
     private static final String TAG = "deMagic:MainActivity";
     private CameraSource mCameraSource = null;
@@ -133,6 +153,7 @@ public class MainActivity extends AppCompatActivity
     private void createCameraSource() {
 
         Context context = getApplicationContext();
+
         FaceDetector detector = new FaceDetector.Builder(context)
                 .setClassificationType(FaceDetector.ALL_CLASSIFICATIONS)
                 .build();
@@ -155,6 +176,7 @@ public class MainActivity extends AppCompatActivity
 
         mCameraSource = new CameraSource.Builder(context, detector)
                 .setRequestedPreviewSize(640, 480)
+                //1024, 768
                 .setFacing(CameraSource.CAMERA_FACING_FRONT)
                 .setRequestedFps(30.0f)
                 .build();
@@ -246,6 +268,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onFaceDetected(UUID faceId) {
         Log.d(TAG, "Detected faceId: " + faceId.toString());
+        Toast.makeText(this, "Face Detected", Toast.LENGTH_SHORT).show();
         new OxfordSimilarityFinder(mLargeFaceListId, (IOxfordSimilarityFinder)this).execute(faceId);
     }
 
@@ -253,9 +276,13 @@ public class MainActivity extends AppCompatActivity
     public void onFoundSimilarFaces(SimilarPersistedFace[] foundFaces) {
         if( foundFaces.length > 0 ) {
             for(SimilarPersistedFace persistedFace: foundFaces) {
+                String toastMessage = "Similar face found";
                 if( persistedFace.confidence > 0.6 ) {
                     new OxfordFaceGetter(mLargeFaceListId, (IOxfordGetter) this).execute(persistedFace);
+                } else {
+                    toastMessage = "Not confident";
                 }
+                Toast.makeText(this, toastMessage, Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -269,7 +296,21 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onShortened(URI shortLink, JSONObject userData) {
         Log.d(TAG, "Shortened");
-        new KarixNotificator(shortLink).execute(userData);
+        new KarixNotificator(shortLink, this).execute(userData);
+    }
+
+    @Override
+    public void onSent(String destination) {
+        String toastMessage = "Notification sent";
+        if( destination.isEmpty() ) {
+            toastMessage = "Notification skipped";
+        } else {
+            toastMessage =  toastMessage.concat(" to ").concat(destination);
+        }
+        Log.d(TAG, toastMessage);
+        Toast.makeText(this, toastMessage,
+                        Toast.LENGTH_SHORT).show();
+
     }
 
     public Bitmap mergeBitmaps(Bitmap face, Bitmap overlay) {
@@ -294,7 +335,20 @@ public class MainActivity extends AppCompatActivity
         final Context context = getApplicationContext();
         final IOxfordFaceDetector callback = this;
 
-        mCameraSource.takePicture(null, new CameraSource.PictureCallback() {
+        // Take a pictures with no sound
+        try {
+            AudioManager mgr = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            mgr.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.FLAG_PLAY_SOUND, 0);
+        } catch(IllegalArgumentException ex ) {
+            Log.d(TAG, "Expected exeption: " + ex.getMessage());
+        }
+
+        mCameraSource.takePicture(new CameraSource.ShutterCallback() {
+            @Override
+            public void onShutter() {
+                Log.d(TAG, "Shutter");
+            }
+        }, new CameraSource.PictureCallback() {
             @Override
             public void onPictureTaken(byte[] bytes) {
 
@@ -328,6 +382,20 @@ public class MainActivity extends AppCompatActivity
                 new FileSaver(context).execute(croppedBmp);
 
                 InputStream inputStream = new ByteArrayInputStream(output.toByteArray());
+//                ListenableFuture<UUID> detectorFuture = oxfordDetector(inputStream);
+//                Futures.addCallback(detectorFuture, new FutureCallback<UUID>() {
+//
+//                    @Override
+//                    public void onSuccess(UUID faceId) {
+//                        Log.d(TAG, "Detected faceId: " + faceId.toString());
+//                        //new OxfordSimilarityFinder(mLargeFaceListId, (IOxfordSimilarityFinder)this).execute(faceId);
+//                    }
+//
+//                    @Override
+//                    public void onFailure(Throwable t) {
+//
+//                    }
+//                });
                 new OxfordFaceDetector(callback).execute(inputStream);
 
                 // Uncomment this AsyncTask c'tor to apply Logic App flow on Azure:
@@ -338,6 +406,47 @@ public class MainActivity extends AppCompatActivity
 
             }
         });
+    }
+
+    private ListenableFuture<UUID> oxfordDetector(final InputStream inputStream) {
+        ExecutorService service = Executors.newFixedThreadPool(1);
+        ListeningExecutorService executor = MoreExecutors.listeningDecorator(service);
+        final FaceServiceClient faceServiceClient = DeMagicApp.getFaceServiceClient();
+
+        Callable<UUID> detectFaceTask =
+                new Callable<UUID>() {
+                    @Override
+                    public UUID call() throws Exception {
+
+                        try {
+
+                            com.microsoft.projectoxford.face.contract.Face[] detectedFaces =
+                            faceServiceClient.detect(inputStream,
+                                    true,       /* Whether to return face ID */
+                                    true,       /* Whether to return face landmarks */
+                                    new FaceServiceClient.FaceAttributeType[] {
+                                            FaceServiceClient.FaceAttributeType.Age,
+                                            FaceServiceClient.FaceAttributeType.Gender,
+                                            FaceServiceClient.FaceAttributeType.Smile,
+                                            FaceServiceClient.FaceAttributeType.Glasses,
+                                            FaceServiceClient.FaceAttributeType.FacialHair,
+                                            FaceServiceClient.FaceAttributeType.Emotion,
+                                            FaceServiceClient.FaceAttributeType.HeadPose,
+                                            FaceServiceClient.FaceAttributeType.Accessories,
+                                            FaceServiceClient.FaceAttributeType.Blur,
+                                            FaceServiceClient.FaceAttributeType.Exposure,
+                                            FaceServiceClient.FaceAttributeType.Hair,
+                                            FaceServiceClient.FaceAttributeType.Makeup,
+                                            FaceServiceClient.FaceAttributeType.Noise,
+                                            FaceServiceClient.FaceAttributeType.Occlusion
+                                    });
+                            return detectedFaces[0].faceId;
+                        } catch(Exception ex) {
+                            return null;
+                        }
+                    }
+                };
+        return executor.submit(detectFaceTask);
     }
 
     private class GraphicFaceTrackerFactory implements MultiProcessor.Factory<Face> {

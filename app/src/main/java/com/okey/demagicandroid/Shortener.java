@@ -8,11 +8,13 @@ import com.microsoft.projectoxford.face.contract.SimilarPersistedFace;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.util.Random;
 import java.util.UUID;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -47,8 +49,12 @@ public class Shortener extends AsyncTask<UUID, Void, URI> {
             client.setDoInput(true);
 
             JSONObject payload = new JSONObject();
+            Random rnd = new Random();
             payload.put("longDynamicLink",
-                    customDomainURL.concat("?link=").concat(longLinkURL).concat("?faceId=").concat(faceId));
+                    customDomainURL.concat("?link=").concat(longLinkURL)
+                            .concat("?faceId=")
+                            .concat(faceId)
+                            .concat("?seed=" + rnd.nextInt()));
             JSONObject optionJSON = new JSONObject();
             optionJSON.put("option", "SHORT");
             payload.put("suffix", optionJSON);
@@ -72,17 +78,12 @@ public class Shortener extends AsyncTask<UUID, Void, URI> {
                 responseReader = new BufferedReader(new InputStreamReader(client.getErrorStream()));
             }
 
-            String responseLine = "";
-            StringBuilder sb = new StringBuilder();
-            while ((responseLine = responseReader.readLine()) != null) {
-                sb.append(responseLine);
-            }
-            String response = sb.toString();
-            Log.d(TAG, response);
+            String responseBody = responseReader != null ?
+                    getResponseBody(responseReader) : "Not expected response";
+            Log.d(TAG, responseBody);
 
-            JSONObject jsonResponse = new JSONObject(response);
+            JSONObject jsonResponse = new JSONObject(responseBody);
             String shortLink = jsonResponse.getString("shortLink");
-
             return new URI(shortLink);
 
         } catch(Exception ex) {
@@ -96,6 +97,24 @@ public class Shortener extends AsyncTask<UUID, Void, URI> {
     protected void onPostExecute(URI shortURI) {
         if( mCallback != null )
             mCallback.onShortened(shortURI, mUserData);
+    }
+
+    private String getResponseBody(BufferedReader reader) {
+
+        StringBuilder sb = new StringBuilder();
+
+        try {
+            String responseLine = "";
+            sb.setLength(0);
+            while ((responseLine = reader.readLine()) != null) {
+                sb.append(responseLine);
+            }
+            return sb.toString();
+        } catch (IOException ex) {
+            Log.e(TAG, ex.getMessage());
+        }
+
+        return "";
     }
 
 }
